@@ -16,13 +16,15 @@ from datetime import date
 from pathlib import Path
 
 from .pantry.state import Pantry, load_pantry, save_pantry, PantryItem
-from .corpus.store import get_default_store, SearchConstraints
+from .corpus.store import get_default_store, SearchConstraints, has_chroma
 from .models import Recipe, MealPlan
 from .constraints.diet import DietConfig
 from .constraints.toddler import ToddlerProfile
 from .planning.planner import plan_week as _plan_week, plan_validate as _plan_validate, PlanConstraints
 from .planning.grocery import grocery_list as _grocery_list
 from .integrations.instacart import stage_shopping_list
+from .ingestion.receipt import ingest_receipt as _ingest_receipt
+from .consumption import decrement_for_recipe
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_STATE = _REPO_ROOT / "data" / "pantry_state.json"
@@ -31,7 +33,16 @@ _SEED = _REPO_ROOT / "data" / "pantry_seed.json"
 # Toddler birthdate: ~17 months old as of the design's reference date.
 _TODDLER = ToddlerProfile(birthdate=os.environ.get("TODDLER_BIRTHDATE", "2025-01-15"))
 
-_store = get_default_store(seed=True)
+def _build_store():
+    """Pick the corpus backend. PANTRY_BACKEND=chroma uses the ChromaDB hybrid
+    store (persisted at PANTRY_CHROMA_DIR if set); default is the keyword store."""
+    if os.environ.get("PANTRY_BACKEND", "").lower() == "chroma" and has_chroma():
+        from .corpus.store import get_chroma_store
+        return get_chroma_store(seed=True, persist_dir=os.environ.get("PANTRY_CHROMA_DIR"))
+    return get_default_store(seed=True)
+
+
+_store = _build_store()
 
 
 def _state_path() -> Path:
@@ -89,6 +100,32 @@ def inventory_voice_note(text: str) -> dict:
 
 def expiry_report() -> dict:
     return {"report": _load_pantry().expiry_report()}
+
+
+def receipt_ingest(text: str | None = None, items_json: str | None = None) -> dict:
+    """Ingest a receipt into the pantry (design.md v1).
+
+    Provide ``text`` (plain receipt / email body, parsed deterministically) or
+    ``items_json`` (a JSON list of ``{"name","qty"?,"unit"?}`` from the VLM that
+    parsed a receipt image on the Mac Studio). Additions are applied immediately.
+    """
+    pantry = _load_pantry()
+    line_items = json.loads(items_json) if items_json else None
+    result = _ingest_receipt(pantry, text=text, line_items=line_items)
+    _save(pantry)
+    return result.to_dict()
+
+
+def cook_recipe(recipe_id: str, scale: float = 1.0) -> dict:
+    """Mark a recipe cooked and decrement its ingredients from the pantry
+    (recipe-decrement, design.md v1)."""
+    recipe = _store.get(recipe_id)
+    if recipe is None:
+        return {"error": f"unknown recipe '{recipe_id}'"}
+    pantry = _load_pantry()
+    result = decrement_for_recipe(pantry, recipe, scale=scale)
+    _save(pantry)
+    return {"recipe": recipe_id, **result.to_dict()}
 
 
 def recipe_search(max_total_minutes: int | None = None, cuisine: str | None = None,
@@ -168,6 +205,8 @@ def build_server():  # pragma: no cover - requires mcp installed
     mcp.tool()(inventory_get)
     mcp.tool()(inventory_update)
     mcp.tool()(inventory_voice_note)
+    mcp.tool()(receipt_ingest)   # v1
+    mcp.tool()(cook_recipe)      # v1: recipe-decrement
     mcp.tool()(expiry_report)
     mcp.tool()(recipe_search)
     mcp.tool()(recipe_add)
@@ -180,11 +219,6 @@ def build_server():  # pragma: no cover - requires mcp installed
     def inventory_scan(images: list[str]) -> dict:
         """VLM fridge/pantry scan -> inventory diff. Deferred to v2 (Mac Studio Qwen-VL)."""
         return _deferred("v2")
-
-    @mcp.tool()
-    def receipt_ingest(path: str) -> dict:
-        """Receipt image/PDF -> pantry deltas. Deferred to v1."""
-        return _deferred("v1")
 
     @mcp.tool()
     def reconcile(data: str) -> dict:
