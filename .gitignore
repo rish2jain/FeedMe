@@ -1,5 +1,6 @@
-# Runtime pantry state (seeded from data/pantry_seed.json)
+# Runtime state (seeded / appended at runtime)
 data/pantry_state.json
+data/events.json
 
 # Python
 __pycache__/

@@ -5,11 +5,16 @@ vegetarian family of three with a ~17-month-old, an Indian (Bengali) cooking bas
 and severe time scarcity. This is the **v0** implementation of the architecture in
 [`docs/design.md`](docs/design.md) (*IMGIA, Refined*).
 
-> Implemented: **v0** (constraint engine + curated corpus + planning + list staging)
-> and **v1** (receipt ingestion + recipe-decrement — inventory becomes mostly
-> self-maintaining). The ChromaDB hybrid-search corpus backend (§1 Stage 3) is also
-> built. No camera/VLM image scan yet (that's v2); pantry state is a JSON file and
-> the VLM receipt-parse step is an injectable seam.
+> **All phases v0–v4 implemented** (design.md §9). v0 constraint engine + corpus +
+> planning + staging; v1 receipt ingestion + recipe-decrement; v2 weekly phone scan +
+> calendar-aware planning + urgency sequencing; v3 reconciliation + depletion
+> prediction + mid-week alerts + daycare lunch class; v4 the fixed-sensing decision
+> trigger. The ChromaDB hybrid-search corpus backend (§1 Stage 3) is built too.
+>
+> All model inference (VLM image→JSON, embeddings, calendar/Gmail fetch) is an
+> **injectable seam** — the orchestrator wires in the Mac Studio's Qwen-VL / Ollama /
+> connectors; no model calls live in this package, keeping it local-first and
+> hermetically testable.
 
 ## What's here
 
@@ -22,6 +27,14 @@ and severe time scarcity. This is the **v0** implementation of the architecture 
 | Inventory | `pantry_local.pantry` | Confidence-aware item store, JSON persistence, urgency-scored expiry report |
 | **Receipt ingestion (v1)** | `pantry_local.ingestion.receipt` | Receipt text / email body parsed deterministically, or VLM line-items → pantry deltas. VLM call is an injectable seam. |
 | **Recipe-decrement (v1)** | `pantry_local.consumption` | Marking a meal cooked subtracts ingredients (unit-aware); bulk staples negligible, unit mismatches flagged not guessed. |
+| **Phone scan (v2)** | `pantry_local.ingestion.scan` | VLM fridge-photo diff: high-confidence applied, low-confidence → confirm/deny, absent perishables flagged (occlusion-safe, never auto-removed). |
+| **Calendar (v2)** | `pantry_local.integrations.calendar` | Late-meeting days → short-cook/leftover time ceilings for the planner. |
+| **Depletion (v3)** | `pantry_local.depletion` | Run-out prediction from per-item rates (override > history > staple defaults). |
+| **Reconciliation (v3)** | `pantry_local.reconcile` | Post-shop diff of receipt vs staged list: received / missing / substitutions. |
+| **Mid-week alerts (v3)** | `pantry_local.alerts` | Deduped expiry + depletion + plan-gap nudges (no daily nagging). |
+| **Daycare lunches (v3)** | `pantry_local.planning.daycare` | Packable, no-reheat, no-choke, nut-free toddler lunches; dormant until daycare starts. |
+| **Hardware trigger (v4)** | `pantry_local.hardware` | Decision rule: recommend fixed sensing only if the weekly scan is skipped 8+ weeks. |
+| Event log | `pantry_local.events` | Append-only cook/receipt/scan/plan history feeding depletion + the v4 trigger. |
 | Planner | `pantry_local.planning.planner` | ~5 dinners with use-first sequencing, variety, calendar time-ceilings, toddler fork, leftover network |
 | Nutrition evaluator | `pantry_local.planning.nutrition` | Dal-rice attractor, iron+C same-meal pairing, protein floor, B12/D watch (advisory) |
 | Grocery | `pantry_local.planning.grocery` | List net of pantry, grouped by store channel (Patel/ShopRite/Costco) + aisle, credit-card hints |
@@ -70,7 +83,9 @@ Register with Claude Desktop / Claude Code (`mcp` config):
 Environment:
 - `PANTRY_STATE` — path to the runtime inventory JSON (default `data/pantry_state.json`,
   falls back to `data/pantry_seed.json`).
+- `PANTRY_EVENTS` — path to the event log JSON (default `data/events.json`).
 - `TODDLER_BIRTHDATE` — ISO date used for age-gated toddler rules.
+- `DAYCARE_ACTIVE` — `true` activates the packable-lunch class and nut-free policy.
 - `PANTRY_BACKEND` — `keyword` (default) or `chroma` for the hybrid corpus backend.
 - `PANTRY_CHROMA_DIR` — persist directory for ChromaDB (omit for ephemeral/in-memory).
 
@@ -90,18 +105,23 @@ Environment:
 
 ### Tool surface (design.md §3)
 
-`inventory_get` · `inventory_update` · `inventory_voice_note` · `receipt_ingest` ·
-`cook_recipe` · `expiry_report` · `recipe_search` · `recipe_add` · `plan_week` ·
-`plan_validate` · `grocery_list` · `instacart_stage`. `inventory_scan` (v2 image
-scan) and `reconcile` (v3) are present but return a "deferred to vN" notice.
+19 tools: `inventory_get` · `inventory_update` · `inventory_voice_note` ·
+`receipt_ingest` · `cook_recipe` · `inventory_scan` · `scan_confirm` · `reconcile` ·
+`depletion_report` · `midweek_alerts` · `daycare_lunches` · `hardware_trigger` ·
+`expiry_report` · `recipe_search` · `recipe_add` · `plan_week` (calendar-aware) ·
+`plan_validate` · `grocery_list` · `instacart_stage`.
 
 ## Roadmap (design.md §9)
 
 - **v0 ✅:** constraint engine + corpus + planning + list staging.
 - **v1 ✅:** receipt ingestion + recipe-decrement (inventory becomes mostly self-maintaining).
-- **v2:** weekly phone scan (Qwen-VL on the Mac Studio) + urgency sequencing + calendar.
-- **v3:** reconciliation, depletion prediction, daycare-lunch class.
-- **v4:** fixed sensing hardware, only on the trigger condition in §6.
+- **v2 ✅:** weekly phone scan (Qwen-VL seam) + calendar-aware planning + urgency sequencing.
+- **v3 ✅:** reconciliation + depletion prediction + mid-week alerts + daycare-lunch class.
+- **v4 ✅:** fixed-sensing decision trigger (recommends hardware only when the §6 condition is met).
+
+The remaining work is **not infrastructure** — it's wiring the injectable seams to the
+household's actual systems (Qwen-VL via Ollama, a real embedder, Gmail/Calendar
+connectors) and growing the recipe corpus with the family's repertoire.
 
 ## Extending the corpus
 
