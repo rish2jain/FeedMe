@@ -1,0 +1,15 @@
+# Runtime pantry state (seeded from data/pantry_seed.json)
+data/pantry_state.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+.chroma/
+chroma/

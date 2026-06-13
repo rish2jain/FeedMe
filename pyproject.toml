@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pantry-local"
+version = "0.0.1"
+description = "Local-first pantry intelligence for a no-egg vegetarian household (IMGIA, Refined)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+# The MCP server surface (design.md Section 3).
+mcp = ["mcp>=1.2.0"]
+# Production corpus backend: ChromaDB hybrid search (design.md Section 1, Stage 3).
+chroma = ["chromadb>=0.5"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+pantry-local = "pantry_local.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
