@@ -23,6 +23,7 @@ from ..pantry.state import Pantry
 from ..corpus.store import RecipeStore, SearchConstraints, ScoredRecipe
 from ..constraints.diet import DietConfig, check_recipe
 from ..constraints.toddler import ToddlerProfile, assess
+from ..knowledge.substitutions import resolve_missing
 from . import nutrition
 
 _DEFAULT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu"]
@@ -155,6 +156,47 @@ def plan_week(
     )
 
 
+def plan_proposal_summary(
+    plan: MealPlan, pantry: Pantry, today: date | None = None,
+) -> dict:
+    """Proposal-first planning session opener (design.md §7).
+
+    Returns a narrative the orchestrator can present before asking questions.
+    """
+    expiring = pantry.expiring_within(_EXPIRY_HORIZON_DAYS, today)
+    expiring_names = sorted({it.canonical for it in expiring})
+    dinner_lines = [
+        f"{m.day}: {m.title} ({m.total_minutes} min)"
+        for m in plan.meals
+    ]
+    short_notes = [n for n in plan.notes if "Short-time" in n or "<=" in n]
+    use_first = []
+    for m in plan.meals:
+        if m.uses_expiring:
+            use_first.append(f"{m.day} uses {', '.join(m.uses_expiring)}")
+    narrative_parts = [
+        f"Here are {len(plan.meals)} dinners for the week starting {plan.week_of}.",
+    ]
+    if expiring_names:
+        narrative_parts.append(
+            "Use soon: " + ", ".join(expiring_names) + "."
+        )
+    if short_notes:
+        narrative_parts.append(short_notes[0] + ".")
+    narrative_parts.append("Swap anything?")
+    return {
+        "narrative": " ".join(narrative_parts),
+        "dinners": dinner_lines,
+        "use_first": use_first,
+        "notes": plan.notes,
+        "orchestrator_prompt": (
+            "Open the planning session with the proposal narrative — do not ask "
+            "open-ended questions first. Present the dinner list, flag expiring "
+            "items and short-time nights, then invite swaps."
+        ),
+    }
+
+
 def plan_validate(
     plan: MealPlan,
     store: RecipeStore,
@@ -196,8 +238,16 @@ def plan_validate(
     quantity = []
     pantry_cans = pantry.canonicals()
     for r in recipes:
-        missing = sorted(_recipe_canonicals(r) - pantry_cans)
-        quantity.append({"recipe": r.id, "missing_from_pantry": missing})
+        missing = []
+        for ing in r.ingredients:
+            if ing.optional:
+                continue
+            c = normalize(ing.name)
+            if not c:
+                continue
+            if resolve_missing(c, pantry_cans) is None:
+                missing.append(c)
+        quantity.append({"recipe": r.id, "missing_from_pantry": sorted(set(missing))})
 
     nutrition_report = nutrition.evaluate(recipes)
 

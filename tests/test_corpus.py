@@ -4,7 +4,7 @@ from pantry_local.corpus.store import get_default_store, KeywordRecipeStore, Sea
 
 def test_seed_store_loads():
     store = get_default_store()
-    assert len(store) >= 15
+    assert len(store) >= 50
 
 
 def test_noncompliant_recipe_rejected_on_add():
@@ -17,11 +17,14 @@ def test_noncompliant_recipe_rejected_on_add():
 
 def test_pantry_overlap_ranks_higher():
     store = get_default_store()
-    # With paneer + peas on hand, matar-paneer should outrank a rajma dish.
-    results = store.search(SearchConstraints(), pantry={"paneer", "peas", "onion", "tomato"})
+    # With paneer + peas on hand, matar-paneer should outrank a dal-heavy dish.
+    results = store.search(
+        SearchConstraints(), pantry={"paneer", "peas", "onion", "tomato"}, limit=50,
+    )
     ids = [r.recipe.id for r in results]
     assert "matar-paneer" in ids
-    assert ids.index("matar-paneer") < ids.index("rajma")
+    assert "masoor-dal" in ids
+    assert ids.index("matar-paneer") < ids.index("masoor-dal")
 
 
 def test_time_filter():

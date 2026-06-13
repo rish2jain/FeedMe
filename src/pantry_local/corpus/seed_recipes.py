@@ -23,11 +23,7 @@ from ..ontology import (
     PROTEIN_TOFU,
     PROTEIN_YOGURT,
 )
-
-
-def _r(**kw) -> Recipe:
-    kw.setdefault("total_minutes", kw.get("prep_minutes", 0) + kw.get("active_minutes", 0))
-    return Recipe(**kw)
+from .helpers import _r
 
 
 SEED_RECIPES: list[Recipe] = [
@@ -462,3 +458,7 @@ SEED_RECIPES: list[Recipe] = [
         source="household",
     ),
 ]
+
+from .extended_recipes import EXTENDED_RECIPES
+
+SEED_RECIPES = SEED_RECIPES + EXTENDED_RECIPES

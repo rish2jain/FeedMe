@@ -41,15 +41,15 @@ def test_time_limit_respected():
 
 
 def test_infeasible_time_limit_falls_back_and_flags():
-    # No seed recipe cooks in under 20min, so the day is filled with the fastest
-    # dish and a short-night note is added rather than the day being dropped.
+    # No recipe cooks in under 5min, so the day is filled with the fastest dish
+    # and a short-night note is added rather than the day being dropped.
     store = get_default_store()
     constraints = PlanConstraints(num_dinners=3,
                                   days=["Mon", "Tue", "Wed"],
-                                  day_time_limits={"Tue": 20})
+                                  day_time_limits={"Tue": 5})
     plan = plan_week(store, _pantry(), constraints, today=TODAY)
     assert len(plan.meals) == 3
-    assert any("nothing under 20min" in n for n in plan.notes)
+    assert any("nothing under 5min" in n for n in plan.notes)
 
 
 def test_variety_avoids_protein_monotony():

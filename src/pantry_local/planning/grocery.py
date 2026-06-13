@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from ..models import MealPlan
 from ..ontology import normalize, lookup, CHANNEL_PATEL, CHANNEL_SHOPRITE, CHANNEL_COSTCO
 from ..pantry.state import Pantry
-from ..corpus.store import RecipeStore
+from ..knowledge.substitutions import resolve_missing
 
 # Static card lookup. The portfolio (Platinum / CSR / Venture X / Bilt) has no
 # strong grocery-category earner, so the recommendation is the least-bad option
@@ -99,8 +99,8 @@ def grocery_list(plan: MealPlan, store: RecipeStore, pantry: Pantry) -> GroceryL
             if not canonical:
                 skipped.append(ing.name)
                 continue
-            if canonical in pantry_cans:
-                continue  # already have it
+            if resolve_missing(canonical, pantry_cans) is not None:
+                continue  # have it or a substitute
             ref = lookup(canonical)
             channel = ref.channel if ref else CHANNEL_SHOPRITE
             aisle = ref.aisle if ref else "other"

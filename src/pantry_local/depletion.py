@@ -55,6 +55,12 @@ def _history_rate(canonical: str, log: EventLog | None, today: date,
     """Infer a daily rate from cook events that decremented this item."""
     if log is None:
         return None
+    # Auto-widen window when enough cook history exists.
+    cook_count = len(log.by_kind(KIND_COOK))
+    if cook_count >= 20:
+        window_days = max(window_days, 56)
+    elif cook_count >= 8:
+        window_days = max(window_days, 42)
     start = today - timedelta(days=window_days)
     total = 0.0
     seen = False

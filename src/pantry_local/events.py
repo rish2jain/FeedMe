@@ -17,6 +17,10 @@ KIND_COOK = "cook"
 KIND_RECEIPT = "receipt"
 KIND_SCAN = "scan"
 KIND_PLAN = "plan"
+KIND_PLAN_SESSION = "plan_session"
+
+# Design §9 kill criterion: if planning skipped by week 6, fix friction first.
+PLAN_SESSION_KILL_WEEKS = 6
 
 
 @dataclass
@@ -73,3 +77,36 @@ def load_events(path: str | Path) -> EventLog:
 
 def save_events(log: EventLog, path: str | Path) -> None:
     Path(path).write_text(json.dumps(log.to_dict(), indent=2))
+
+
+def plan_session_status(log: EventLog, today: date | None = None) -> dict:
+    """Report planning-session cadence for the §9 kill criterion."""
+    today = today or date.today()
+    sessions = log.by_kind(KIND_PLAN_SESSION)
+    completed = [e for e in sessions if e.data.get("completed")]
+    last_date: date | None = None
+    for ev in reversed(completed):
+        d = ev.event_date()
+        if d:
+            last_date = d
+            break
+    weeks_since = None
+    if last_date:
+        weeks_since = (today - last_date).days // 7
+    elif sessions:
+        weeks_since = 999
+    else:
+        weeks_since = None
+    kill_triggered = weeks_since is not None and weeks_since >= PLAN_SESSION_KILL_WEEKS
+    return {
+        "last_session": last_date.isoformat() if last_date else None,
+        "weeks_since_last": weeks_since,
+        "total_sessions_logged": len(completed),
+        "kill_criterion_triggered": kill_triggered,
+        "message": (
+            f"Planning session skipped {PLAN_SESSION_KILL_WEEKS}+ weeks — "
+            "fix the 10-min loop before adding features."
+            if kill_triggered
+            else "Planning cadence OK."
+        ),
+    }

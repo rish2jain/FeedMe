@@ -47,6 +47,9 @@ and sequences.
 
 ## Quickstart
 
+**Full activation guide (Ollama, Gmail, Calendar, Instacart, MCP, spouse web):**
+see [`quick_start.md`](quick_start.md).
+
 ```bash
 # Run the tests (no install needed; tests put src/ on the path)
 python -m pytest
@@ -87,7 +90,20 @@ Environment:
 - `TODDLER_BIRTHDATE` — ISO date used for age-gated toddler rules.
 - `DAYCARE_ACTIVE` — `true` activates the packable-lunch class and nut-free policy.
 - `PANTRY_BACKEND` — `keyword` (default) or `chroma` for the hybrid corpus backend.
-- `PANTRY_CHROMA_DIR` — persist directory for ChromaDB (omit for ephemeral/in-memory).
+  Auto-selects `chroma` when `OLLAMA_EMBED_MODEL` is set.
+- `PANTRY_CHROMA_DIR` — persist directory for ChromaDB (default `data/chroma`).
+
+Integration (Mac Studio, `pip install -e ".[integrations,chroma,mcp]"`):
+- `OLLAMA_HOST` — default `http://127.0.0.1:11434`
+- `OLLAMA_EMBED_MODEL` — e.g. `nomic-embed-text` (semantic Chroma search)
+- `OLLAMA_VLM_MODEL` — e.g. `qwen2.5-vl:32b` (receipt + fridge scan)
+- `GMAIL_CREDENTIALS` / `GMAIL_TOKEN` — OAuth for `receipt_fetch_gmail`
+- `GOOGLE_CALENDAR_CREDENTIALS` / `GOOGLE_CALENDAR_TOKEN` — auto calendar in `plan_week`
+- `INSTACART_MCP_COMMAND` — wrapper script for Instacart `create-shopping-list`
+
+Spouse LAN web view (`pip install -e ".[web]"`):
+- `pantry-local-web` — serves on `0.0.0.0:8765` (override with `PANTRY_WEB_HOST`/`PORT`)
+- `PANTRY_WEB_PIN` — optional shared PIN; `PANTRY_CURRENT_PLAN` — plan JSON path
 
 ### Corpus backends
 
@@ -105,11 +121,13 @@ Environment:
 
 ### Tool surface (design.md §3)
 
-19 tools: `inventory_get` · `inventory_update` · `inventory_voice_note` ·
-`receipt_ingest` · `cook_recipe` · `inventory_scan` · `scan_confirm` · `reconcile` ·
-`depletion_report` · `midweek_alerts` · `daycare_lunches` · `hardware_trigger` ·
-`expiry_report` · `recipe_search` · `recipe_add` · `plan_week` (calendar-aware) ·
-`plan_validate` · `grocery_list` · `instacart_stage`.
+22 tools: `inventory_get` · `inventory_update` · `inventory_voice_note` ·
+`receipt_ingest` · `receipt_fetch_gmail` · `cook_recipe` · `inventory_scan` ·
+`scan_confirm` · `reconcile` · `depletion_report` · `midweek_alerts` ·
+`daycare_lunches` · `hardware_trigger` · `expiry_report` · `recipe_search` ·
+`recipe_add` · `plan_week` (calendar-aware, proposal summary) · `plan_validate` ·
+`plan_session_complete` · `plan_session_status_report` · `grocery_list` ·
+`instacart_stage`.
 
 ## Roadmap (design.md §9)
 
@@ -125,7 +143,5 @@ connectors) and growing the recipe corpus with the family's repertoire.
 
 ## Extending the corpus
 
-The seed corpus (`src/pantry_local/corpus/seed_recipes.py`) ships ~18 recipes; the
-v0 target is 50+. The family's own transcribed repertoire is the highest-value data
-in the whole system. Every recipe added via `recipe_add` is diet-checked before it
-enters the corpus, so the corpus is guaranteed clean.
+The seed corpus ships **53 recipes** (18 core + 35 extended Bengali/Indian baseline);
+replace/extend with the family's transcribed repertoire via `recipe_add`.
